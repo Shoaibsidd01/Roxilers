@@ -1,0 +1,143 @@
+/*GET
+Create API to initialize the database. fetch the JSON from the third party API and
+initialize the database with seed data. You are free to define your own efficient table /
+collection structure*/
+
+const axios = require('axios');
+const mongoose = require('mongoose');
+const Transaction = require('./models/Transaction'); // MongoDB model
+
+const seedDatabase = async () => {
+  try {
+    const response = await axios.get('https://s3.amazonaws.com/roxiler.com/product_transaction.json');
+    await Transaction.insertMany(response.data);
+    console.log('Database seeded successfully!');
+  } catch (error) {
+    console.error('Error seeding database:', error);
+  }
+};
+
+/*GET
+Create an API to list the all transactions
+- API should support search and pagination on product transactions
+- Based on the value of search parameters, it should match search text on product
+title/description/price and based on matching result it should return the product
+transactions
+- If search parameter is empty then based on applied pagination it should return all the
+records of that page number
+- Default pagination values will be like page = 1, per page = 10*/
+
+app.get('/api/transactions', async (req, res) => {
+  const { search = '', page = 1, per_page = 10, month } = req.query;
+  const regex = new RegExp(search, 'i');
+  const query = {
+    dateOfSale: { $regex: `-${month}-` }, // Match the month regardless of year
+    $or: [
+      { title: regex },
+      { description: regex },
+      { price: regex }
+    ]
+  };
+  const transactions = await Transaction.find(query)
+    .skip((page - 1) * per_page)
+    .limit(parseInt(per_page));
+  res.json(transactions);
+});
+
+/*GET
+Create an API for statistics
+- Total sale amount of selected month
+- Total number of sold items of selected month
+- Total number of not sold items of selected month */
+
+app.get('/api/statistics', async (req, res) => {
+  const { month } = req.query;
+  const transactions = await Transaction.find({ dateOfSale: { $regex: `-${month}-` } });
+
+  const totalSales = transactions.reduce((acc, t) => acc + t.price, 0);
+  const soldItems = transactions.filter(t => t.sold).length;
+  const notSoldItems = transactions.length - soldItems;
+
+  res.json({ totalSales, soldItems, notSoldItems });
+});
+
+/* GET
+Create an API for bar chart ( the response should contain price range and the number
+of items in that range for the selected month regardless of the year )
+- 0 - 100
+- 101 - 200
+- 201-300
+- 301-400
+- 401-500
+- 501 - 600
+- 601-700
+- 701-800
+- 801-900
+- 901-above */
+
+app.get('/api/bar-chart', async (req, res) => {
+  const { month } = req.query;
+  const transactions = await Transaction.find({ dateOfSale: { $regex: `-${month}-` } });
+
+  const priceRanges = {
+    '0-100': 0,
+    '101-200': 0,
+    '201-300': 0,
+    // ... other ranges
+  };
+
+  transactions.forEach(t => {
+    if (t.price >= 0 && t.price <= 100) priceRanges['0-100']++;
+    else if (t.price >= 101 && t.price <= 200) priceRanges['101-200']++;
+    // ... other conditions
+  });
+
+  res.json(priceRanges);
+});
+
+/*GET
+Create an API for pie chart Find unique categories and number of items from that
+category for the selected month regardless of the year.
+For example :
+- X category : 20 (items)
+- Y category : 5 (items)
+- Z category : 3 (items)*/
+
+app.get('/api/pie-chart', async (req, res) => {
+  const { month } = req.query;
+  const transactions = await Transaction.find({ dateOfSale: { $regex: `-${month}-` } });
+
+  const categoryCounts = transactions.reduce((acc, t) => {
+    acc[t.category] = (acc[t.category] || 0) + 1;
+    return acc;
+  }, {});
+
+  res.json(categoryCounts);
+});
+
+/*Frontend (React)
+Transactions Table
+
+Use the /api/transactions endpoint to display the transaction data in a table.
+Implement a search box and pagination controls to fetch filtered data based on user input.
+Statistics, Bar Chart, and Pie Chart
+
+Use the /api/statistics, /api/bar-chart, and /api/pie-chart APIs to display the required charts.
+Libraries like Chart.js or Recharts can be used to build the charts in React.*/
+
+import { Bar } from 'react-chartjs-2';
+
+const BarChart = ({ data }) => {
+  const chartData = {
+    labels: ['0-100', '101-200', '201-300', ...],
+    datasets: [{
+      label: 'Number of Items',
+      data: Object.values(data),
+      backgroundColor: 'rgba(75, 192, 192, 0.2)',
+      borderColor: 'rgba(75, 192, 192, 1)',
+    }]
+  };
+
+  return <Bar data={chartData} />;
+};
+
